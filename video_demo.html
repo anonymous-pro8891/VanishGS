@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VanishGS: Visual Comparisons</title>
+  
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/img-comparison-slider@8/dist/styles.css"/>
+  <script defer src="https://cdn.jsdelivr.net/npm/img-comparison-slider@8/dist/index.js"></script>
+
+  <style>
+    body {
+      background-color: #f0f2f5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      padding: 30px 20px;
+    }
+
+    .header-section {
+      text-align: center;
+      margin-bottom: 30px;
+      width: 100%;
+      max-width: 1000px;
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      position: sticky;
+      top: 20px;
+      z-index: 100;
+    }
+
+    h1 {
+      margin: 0 0 15px 0;
+      color: #2c3e50;
+      font-size: 24px;
+    }
+
+    .controls {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 15px;
+    }
+
+    select {
+      padding: 8px 16px;
+      font-size: 16px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      background-color: #f8f9fa;
+      cursor: pointer;
+      font-weight: bold;
+      color: #2980b9;
+    }
+
+    select:focus {
+      outline: none;
+      border-color: #3498db;
+    }
+
+    .gallery {
+      display: flex;
+      flex-direction: column;
+      gap: 40px;
+      width: 100%;
+      max-width: 1000px;
+    }
+
+    .scene-card {
+      background: white;
+      padding: 25px;
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    }
+
+    .scene-title {
+      margin-top: 0;
+      margin-bottom: 15px;
+      color: #34495e;
+      text-transform: capitalize;
+      border-bottom: 2px solid #ecf0f1;
+      padding-bottom: 10px;
+    }
+
+    .slider-wrapper {
+      position: relative;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #000;
+    }
+
+    img-comparison-slider {
+      display: block;
+      width: 100%;
+    }
+    
+    img-comparison-slider:focus {
+      outline: none;
+    }
+
+    video {
+      width: 100%;
+      height: auto;
+      display: block;
+      object-fit: cover; 
+    }
+
+    .video-label {
+      position: absolute;
+      top: 15px;
+      background: rgba(0, 0, 0, 0.75);
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 6px;
+      pointer-events: none;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .method-title {
+      font-size: 15px;
+      font-weight: bold;
+      line-height: 1.2;
+    }
+
+    .method-metrics {
+      font-size: 12px;
+      color: #f1c40f; 
+      font-family: monospace;
+      line-height: 1.2;
+    }
+
+    .label-left { left: 15px; }
+    .label-right {
+      right: 15px;
+      background: rgba(39, 174, 96, 0.85); 
+    }
+    .label-right .method-metrics { color: #fff; }
+
+    .instruction {
+      text-align: center;
+      color: #7f8c8d;
+      font-size: 0.9em;
+      margin-top: 15px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="header-section">
+  <h1>VanishGS: Visual Comparisons at 90% Pruning + 5,000 Fine-Tuning</h1>
+  <div class="controls">
+    <label for="global-method-selector"><strong>Compare VanishGS (Ours) against:</strong></label>
+    <select id="global-method-selector">
+      <option value="lightgaussian">LightGaussian</option>
+      <option value="mesongs">MesonGS</option>
+      <option value="pup">PUP</option>
+      <option value="rap">RAP</option>
+      <option value="refine">REFINE</option>
+      <option value="eagles">EAGLES</option>
+      <option value="opacity">Opacity</option>
+    </select>
+  </div>
+  <p style="margin: 10px 0 0 0; font-size: 13px; color: #7f8c8d;">
+    Drag the slider to compare synchronized videos. Labels show per-scene PSNR and final PLY Size. The right side is always VanishGS (Ours).
+  </p>
+</div>
+
+<div class="gallery" id="gallery-container">
+</div>
+
+<script>
+  // ==========================================
+  // Files use the actual on-disk naming rule: <scene>_<lowercase_method>.mp4.
+  // Do not use the old names such as <scene>_LightGaussian.mp4 or
+  // <scene>_VanishGS(Ours).mp4.
+  // ==========================================
+  // Values are per-scene results at 90% pruning followed by 5,000 fine-tuning
+  // iterations, taken from ALL_SUMMARY_by_dataset_with_Vanish_new.xlsx.
+  const scenesData = {
+    bicycle: {
+      dataset: "Mip-NeRF 360",
+      metrics: {
+        lightgaussian: { psnr: 23.424593, size: 145.0292 }, mesongs: { psnr: 24.6468964, size: 145.0292 },
+        pup: { psnr: 24.0448532, size: 145.0292 }, rap: { psnr: 24.1609726, size: 111.6565 },
+        refine: { psnr: 24.1064358, size: 145.0290 }, eagles: { psnr: 24.78437, size: 145.0290 },
+        opacity: { psnr: 22.5238, size: 145.0290 }, vanish: { psnr: 24.4990559, size: 145.0290 }
+      }
+    },
+ truck: {
+      dataset: "Tanks & Temples",
+      metrics: {
+        lightgaussian: { psnr: 24.1286678, size: 60.1042 }, mesongs: { psnr: 24.2856045, size: 60.1044 },
+        pup: { psnr: 22.9348755, size: 60.1044 }, rap: { psnr: 24.550333, size: 60.1042 },
+        refine: { psnr: 23.5014, size: 60.1042 }, eagles: { psnr: 23.98747, size: 60.1044 },
+        opacity: { psnr: 23.96384, size: 60.1044 }, vanish: { psnr: 24.9013062, size: 60.1042 }
+      }
+    },
+    garden: {
+      dataset: "Mip-NeRF 360",
+      metrics: {
+        lightgaussian: { psnr: 25.0938358, size: 138.0008 }, mesongs: { psnr: 25.7201538, size: 138.0008 },
+        pup: { psnr: 25.5576019, size: 138.0008 }, rap: { psnr: 25.4796772, size: 99.3735 },
+        refine: { psnr: 25.1039829, size: 138.0006 }, eagles: { psnr: 25.43841, size: 138.0006 },
+        opacity: { psnr: 24.87956, size: 138.0006 }, vanish: { psnr: 26.2431393, size: 138.0006 }
+      }
+    },
+    stump: {
+      dataset: "Mip-NeRF 360",
+      metrics: {
+        lightgaussian: { psnr: 25.1791344, size: 117.3536 }, mesongs: { psnr: 25.966465, size: 117.3536 },
+        pup: { psnr: 25.8694763, size: 117.3536 }, rap: { psnr: 25.1192245, size: 117.3534 },
+        refine: { psnr: 25.9443092, size: 117.3534 }, eagles: { psnr: 25.9817, size: 117.3536 },
+        opacity: { psnr: 24.40524, size: 117.3536 }, vanish: { psnr: 26.2493286, size: 117.3534 }
+      }
+    },
+    kitchen: {
+      dataset: "Deep Blending",
+      metrics: {
+        lightgaussian: { psnr: 28.2152195, size: 43.8114 }, mesongs: { psnr: 29.2954273, size: 43.8114 },
+        pup: { psnr: 28.5012703, size: 43.8114 }, rap: { psnr: 28.6306973, size: 43.8111 },
+        refine: { psnr: 26.5414753, size: 43.8109 }, eagles: { psnr: 28.98259, size: 43.8111 },
+        opacity: { psnr: 27.96725, size: 43.8111 }, vanish: { psnr: 30.3158169, size: 43.8111 }
+      }
+    },
+    room: {
+      dataset: "Mip-NeRF 360",
+      metrics: {
+        lightgaussian: { psnr: 30.0973282, size: 37.6867 }, mesongs: { psnr: 30.360836, size: 37.6867 },
+        pup: { psnr: 30.3608589, size: 37.6867 }, rap: { psnr: 30.4229202, size: 37.6865 },
+        refine: { psnr: 28.1334095, size: 37.6865 }, eagles: { psnr: 30.31939, size: 37.6867 },
+        opacity: { psnr: 29.87181, size: 37.6867 }, vanish: { psnr: 31.2422886, size: 37.6865 }
+      }
+    }
+  };
+
+  const methods = {
+    lightgaussian: { title: "LightGaussian" },
+    mesongs: { title: "MesonGS" },
+    pup: { title: "PUP" },
+    rap: { title: "RAP" },
+    refine: { title: "REFINE" },
+    eagles: { title: "EAGLES" },
+    opacity: { title: "Opacity" },
+    vanish: { title: "VanishGS (Ours)" }
+  };
+
+  const gallery = document.getElementById("gallery-container");
+  const globalSelector = document.getElementById("global-method-selector");
+  const sceneList = Object.keys(scenesData);
+
+  function metricLabel(metric) {
+    if (!metric) return "PSNR: N/A | Size: N/A";
+    return `PSNR: ${metric.psnr.toFixed(2)} | Size: ${metric.size.toFixed(1)} MB`;
+  }
+
+  // 1. Dynamically build HTML for all scene cards
+  sceneList.forEach(scene => {
+    // Update name to VanishGS based on the table
+    const oursVideoPath = `Visual_Video/${scene}/${scene}_vanish.mp4`;
+    const initialMethod = globalSelector.value;
+    const initialLeftVideoPath = `Visual_Video/${scene}/${scene}_${initialMethod}.mp4`;
+    
+    const sceneData = scenesData[scene];
+    const leftData = methods[initialMethod];
+    const leftMetrics = metricLabel(sceneData.metrics[initialMethod]);
+    const oursMetrics = metricLabel(sceneData.metrics.vanish);
+
+    const cardHTML = `
+      <div class="scene-card" id="card-${scene}">
+        <h2 class="scene-title">${scene} <span style="font-size: 0.65em; font-weight: normal; color: #7f8c8d;">(${sceneData.dataset})</span></h2>
+        <div class="slider-wrapper">
+          <img-comparison-slider class="scene-slider">
+            
+            <div slot="first" style="position: relative; width: 100%;">
+              <div class="video-label label-left">
+                <div class="method-title left-title">${leftData.title}</div>
+                <div class="method-metrics left-metrics">${leftMetrics}</div>
+              </div>
+              <video class="vid-left" width="100%" autoplay muted loop playsinline>
+                <source src="${initialLeftVideoPath}" type="video/mp4">
+              </video>
+            </div>
+            
+            <div slot="second" style="position: relative; width: 100%;">
+              <div class="video-label label-right">
+                <div class="method-title">VanishGS (Ours)</div>
+                <div class="method-metrics">${oursMetrics}</div>
+              </div>
+              <video class="vid-right" width="100%" autoplay muted loop playsinline>
+                <source src="${oursVideoPath}" type="video/mp4">
+              </video>
+            </div>
+
+            <svg slot="handle" xmlns="http://www.w3.org/2000/svg" width="100" viewBox="-8 -3 16 6">
+              <path stroke="#fff" d="M -5 -2 L -7 0 L -5 2 M -5 -2 L -5 2 M 5 -2 L 7 0 L 5 2 M 5 -2 L 5 2" stroke-width="1.5" fill="none" vector-effect="non-scaling-stroke"></path>
+            </svg>
+            
+          </img-comparison-slider>
+        </div>
+      </div>
+    `;
+    gallery.insertAdjacentHTML('beforeend', cardHTML);
+  });
+
+  // 2. Bind independent playback control and sync logic for each scene
+  sceneList.forEach(scene => {
+    const card = document.getElementById(`card-${scene}`);
+    const v1 = card.querySelector('.vid-left');
+    const v2 = card.querySelector('.vid-right');
+    const slider = card.querySelector('.scene-slider');
+
+    // Initialize playback rate to 0.3
+    v1.playbackRate = 0.3;
+    v2.playbackRate = 0.3;
+
+    // Playback state synchronization
+    v1.addEventListener("play", () => {
+      v2.playbackRate = 0.3; // Ensure tracking the left playback rate
+      v2.play();
+    });
+    v1.addEventListener("pause", () => v2.pause());
+    
+    // Progress bar time synchronization correction
+    v1.addEventListener("timeupdate", () => {
+      if (Math.abs(v1.currentTime - v2.currentTime) > 0.1) {
+        v2.currentTime = v1.currentTime;
+      }
+    });
+
+    // Click to play/pause
+    slider.addEventListener('click', (e) => {
+      if(e.target.tagName.toLowerCase() === 'svg' || e.target.closest('svg')) return;
+      if (v1.paused) {
+        v1.play();
+        v2.play();
+      } else {
+        v1.pause();
+        v2.pause();
+      }
+    });
+  });
+
+  // 3. Global dropdown menu switching logic
+  globalSelector.addEventListener("change", (e) => {
+    const selectedMethodCode = e.target.value;
+
+    sceneList.forEach(scene => {
+      const card = document.getElementById(`card-${scene}`);
+      const v1 = card.querySelector('.vid-left');
+      const v2 = card.querySelector('.vid-right');
+      const titleEl = card.querySelector('.left-title');
+      const metricsEl = card.querySelector('.left-metrics');
+
+      const newVideoPath = `Visual_Video/${scene}/${scene}_${selectedMethodCode}.mp4`;
+      v1.querySelector('source').src = newVideoPath;
+      v1.load();
+      v1.playbackRate = 0.3; // Reset playback rate after load
+      v1.play();
+
+      // Sync right video time
+      v2.currentTime = 0;
+      v1.currentTime = 0;
+
+      // Update text and metrics on the left panel
+      const data = methods[selectedMethodCode];
+      titleEl.innerText = data.title;
+      metricsEl.innerText = metricLabel(scenesData[scene].metrics[selectedMethodCode]);
+    });
+  });
+
+</script>
+
+</body>
+</html>
